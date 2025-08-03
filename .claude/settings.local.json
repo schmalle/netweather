@@ -3,7 +3,16 @@
     "allow": [
       "Bash(go mod init:*)",
       "Bash(go mod:*)",
-      "Bash(go build:*)"
+      "Bash(go build:*)",
+      "Bash(go get:*)",
+      "Bash(./netweather:*)",
+      "Bash(gh pr create:*)",
+      "Bash(./scripts/test_stats.sh:*)",
+      "Bash(git commit:*)",
+      "Bash(./scripts/test_nmap.sh)",
+      "Bash(./scripts/test_nmap.sh:*)",
+      "Bash(./scripts/test_stats.sh:*)",
+      "Bash(git reset:*)"
     ],
     "deny": []
   }
