@@ -1,0 +1,5 @@
+google.com
+github.com
+https://example.com
+http://httpstat.us/301
+www.cloudflare.com

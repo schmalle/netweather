@@ -1,0 +1,6 @@
+https://www.google.com
+https://login.microsoftonline.com/common/oauth2/authorize
+https://github.com
+https://login.microsoftonline.com/tenant/oauth2/v2.0/authorize
+http://example.com
+https://subdomain.login.microsoftonline.com/path

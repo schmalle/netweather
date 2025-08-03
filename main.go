@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"flag"
@@ -11,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 	"golang.org/x/net/html"
@@ -31,6 +33,11 @@ func main() {
 		nmapOptions = flag.String("nmap-options", "", "Additional nmap options")
 		useRemoteDB = flag.Bool("remote-db", false, "Use remote entries.db from GitHub instead of local file")
 		verbose     = flag.Bool("verbose", false, "Enable verbose output (shows all URLs including non-200 responses)")
+		// Parallelization flags
+		workers     = flag.Int("workers", 8, "Number of concurrent URL workers")
+		requestDelay = flag.Int("request-delay", 100, "Delay between requests in milliseconds")
+		batchSize   = flag.Int("batch-size", 50, "Database batch size for bulk operations")
+		sequential  = flag.Bool("sequential", false, "Force sequential processing (disable parallelization)")
 	)
 	flag.Parse()
 
@@ -98,14 +105,50 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Choose between sequential and parallel processing
+	if *sequential || *workers <= 1 {
+		// Sequential processing (original logic)
+		processURLsSequentially(urls, *useDB, *verbose, *portScan, *scanPorts, *nmapOptions)
+	} else {
+		// Parallel processing (new logic)
+		config := ParallelConfig{
+			MaxWorkers:   *workers,
+			RequestDelay: time.Duration(*requestDelay) * time.Millisecond,
+			BatchSize:    *batchSize,
+			UseDB:        *useDB,
+			Verbose:      *verbose,
+		}
+		
+		processor := NewParallelProcessor(config)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+		
+		if err := processor.ProcessURLs(ctx, urls); err != nil {
+			logger.Printf("Error in parallel processing: %v\n", err)
+			fmt.Printf("Error in parallel processing: %v\n", err)
+		}
+		
+		// Port scanning is handled within parallel processing for now
+		// TODO: Add parallel port scanning support
+		if *portScan {
+			logger.Println("Note: Port scanning in parallel mode is not yet implemented")
+			fmt.Println("Note: Port scanning in parallel mode is not yet implemented")
+		}
+	}
+	logger.Println("Application finished")
+}
+
+// processURLsSequentially handles sequential URL processing (original logic)
+func processURLsSequentially(urls []string, useDB, verbose, portScan bool, scanPorts, nmapOptions string) {
 	totalURLs := len(urls)
 	processedCount := 0
 	scannedCount := 0
 	skippedCount := 0
+	excludedCount := 0
 	errorCount := 0
 	
 	// Show initial progress in non-verbose mode
-	if !*verbose {
+	if !verbose {
 		fmt.Printf("Processing %d URLs...\n", totalURLs)
 		fmt.Print("Progress: ")
 	}
@@ -114,8 +157,19 @@ func main() {
 		processedCount++
 		logger.Printf("Processing URL: %s\n", url)
 		
-		if *verbose {
+		if verbose {
 			fmt.Printf("\nProcessing URL: %s\n", url)
+		}
+		
+		// Check if URL should be excluded
+		if shouldExcludeURL(url) {
+			excludedCount++
+			logger.Printf("Skipping excluded URL: %s\n", url)
+			if verbose {
+				fmt.Printf("  - Skipping excluded URL (Microsoft login domain)\n")
+			}
+			updateProgress(processedCount, totalURLs, verbose)
+			continue
 		}
 		
 		// First check URL reachability
@@ -123,16 +177,16 @@ func main() {
 		if err != nil {
 			errorCount++
 			logger.Printf("Error checking reachability for %s: %v\n", url, err)
-			if *verbose {
+			if verbose {
 				fmt.Printf("  - Error checking reachability: %v\n", err)
 			}
-			updateProgress(processedCount, totalURLs, *verbose)
+			updateProgress(processedCount, totalURLs, verbose)
 			continue
 		}
 		
 		// Display reachability information
 		if reachability.HTTPAvailable || reachability.HTTPSAvailable {
-			if *verbose {
+			if verbose {
 				protocols := []string{}
 				if reachability.HTTPAvailable {
 					protocols = append(protocols, fmt.Sprintf("HTTP (%d)", reachability.HTTPStatusCode))
@@ -152,23 +206,23 @@ func main() {
 			}
 		} else {
 			errorCount++
-			if *verbose {
+			if verbose {
 				fmt.Printf("  - URL not reachable\n")
 			}
 			logger.Printf("URL %s is not reachable\n", url)
 			
 			// Store reachability result even if not reachable
-			if *useDB {
+			if useDB {
 				if err := storeURLReachability(reachability); err != nil {
 					logger.Printf("Error storing reachability data for %s: %v\n", url, err)
 				}
 			}
-			updateProgress(processedCount, totalURLs, *verbose)
+			updateProgress(processedCount, totalURLs, verbose)
 			continue
 		}
 		
 		// Store reachability data in database
-		if *useDB {
+		if useDB {
 			if err := storeURLReachability(reachability); err != nil {
 				logger.Printf("Error storing reachability data for %s: %v\n", url, err)
 			}
@@ -179,10 +233,10 @@ func main() {
 			skippedCount++
 			logger.Printf("Skipping JavaScript scanning for %s - no HTTP 200 response (HTTP: %d, HTTPS: %d)\n", 
 				url, reachability.HTTPStatusCode, reachability.HTTPSStatusCode)
-			if *verbose {
+			if verbose {
 				fmt.Printf("  - Skipping JavaScript scan (no HTTP 200 response)\n")
 			}
-			updateProgress(processedCount, totalURLs, *verbose)
+			updateProgress(processedCount, totalURLs, verbose)
 			continue
 		}
 		
@@ -195,36 +249,77 @@ func main() {
 		scannedCount++
 		logger.Printf("Scanning URL: %s\n", finalURL)
 		
-		if *verbose {
+		if verbose {
 			fmt.Printf("  - Scanning for JavaScript libraries...\n")
 		} else {
 			// Show which URL we're scanning in non-verbose mode
 			fmt.Printf("\n[%d/%d] Scanning: %s", processedCount, totalURLs, finalURL)
 		}
 		
-		scanURL(finalURL, *useDB, *verbose)
+		scanURL(finalURL, useDB, verbose)
 		
 		// Perform port scan if enabled
-		if *portScan {
+		if portScan {
 			logger.Printf("Port scanning URL: %s\n", finalURL)
-			if *verbose {
+			if verbose {
 				fmt.Printf("  - Port scanning: %s\n", finalURL)
 			}
-			performPortScan(finalURL, *scanPorts, *nmapOptions)
+			performPortScan(finalURL, scanPorts, nmapOptions)
 		}
 		
-		updateProgress(processedCount, totalURLs, *verbose)
+		// For non-verbose mode, add newline after successful scan before progress continues
+		if !verbose {
+			fmt.Print("\nProgress: ")
+		}
+		updateProgress(processedCount, totalURLs, verbose)
 	}
 	
 	// Final summary
-	if !*verbose {
+	if !verbose {
 		fmt.Printf("\n\nScan completed!\n")
 		fmt.Printf("Total URLs processed: %d\n", processedCount)
 		fmt.Printf("Successfully scanned: %d\n", scannedCount)
-		fmt.Printf("Skipped (non-200): %d\n", skippedCount)
-		fmt.Printf("Errors/Unreachable: %d\n", errorCount)
+		if excludedCount > 0 {
+			fmt.Printf("Excluded URLs: %d\n", excludedCount)
+		}
+		if skippedCount > 0 {
+			fmt.Printf("Skipped (non-200): %d\n", skippedCount)
+		}
+		if errorCount > 0 {
+			fmt.Printf("Errors/Unreachable: %d\n", errorCount)
+		}
 	}
-	logger.Println("Application finished")
+}
+
+// shouldExcludeURL checks if a URL should be excluded from scanning
+func shouldExcludeURL(inputURL string) bool {
+	// List of excluded domains/patterns - add sensitive domains here
+	excludedDomains := []string{
+		"login.microsoftonline.com", // Microsoft Online login URLs
+	}
+	
+	// Parse the URL to extract the hostname
+	parsedURL, err := url.Parse(inputURL)
+	if err != nil {
+		// If we can't parse the URL, check the raw string
+		for _, domain := range excludedDomains {
+			if strings.Contains(strings.ToLower(inputURL), strings.ToLower(domain)) {
+				return true
+			}
+		}
+		return false
+	}
+	
+	hostname := strings.ToLower(parsedURL.Hostname())
+	
+	// Check if the hostname matches any excluded domain
+	for _, domain := range excludedDomains {
+		if hostname == strings.ToLower(domain) || strings.HasSuffix(hostname, "."+strings.ToLower(domain)) {
+			return true
+		}
+	}
+	
+	return false
 }
 
 // updateProgress shows progress indicator for non-verbose mode
@@ -401,6 +496,7 @@ func printHelp() {
 	fmt.Println("  - Handles URLs without protocol prefix (tests both HTTP/HTTPS)")
 	fmt.Println("  - Skips JavaScript scanning for non-200 responses")
 	fmt.Println("  - Clean, progress-based output in non-verbose mode")
+	fmt.Println("  - Excludes sensitive domains (e.g., Microsoft login URLs)")
 }
 
 // getConfigValue returns the first non-empty value from command line, environment, or default

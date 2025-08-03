@@ -9,6 +9,7 @@ NetWeather is a Go command-line application that scans websites for embedded Jav
 - Handles URLs without protocol prefix (automatically tests both HTTP/HTTPS)
 - Follows redirects and stores redirect information
 - Records HTTP/HTTPS status codes and availability
+- Excludes sensitive domains (e.g., Microsoft login URLs) from scanning
 - Parses command-line arguments for URL input files
 - Scans HTML pages for `<script>` tags with external JavaScript sources
 - Computes SHA-256 checksums of JavaScript libraries
