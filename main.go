@@ -28,11 +28,18 @@ func main() {
 		portScan    = flag.Bool("port-scan", false, "Enable port scanning with nmap")
 		scanPorts   = flag.String("scan-ports", "80,443,8080,8443", "Ports to scan (default: common web ports)")
 		nmapOptions = flag.String("nmap-options", "", "Additional nmap options")
+		useRemoteDB = flag.Bool("remote-db", false, "Use remote entries.db from GitHub instead of local file")
 	)
 	flag.Parse()
 
 	initLogger("netweather.log")
 	logger.Println("Application started")
+
+	// Configure remote database if flag is set
+	if *useRemoteDB {
+		SetRemoteDB(true)
+		logger.Println("Remote database mode enabled")
+	}
 
 	// Load .env file if it exists
 	if err := godotenv.Load(); err != nil {
