@@ -11,11 +11,13 @@ var db *sql.DB
 
 // ScanResult holds the result of a single script scan.
 type ScanResult struct {
-	URL         string
-	ScriptURL   string
-	Checksum    string
-	LibraryName string
-	ScannedAt   time.Time
+	URL              string
+	ScriptURL        string
+	Checksum         string
+	LibraryName      string
+	LibraryVersion   string
+	IdentifiedBy     string // Method used for identification (url-pattern, api, code-analysis, etc.)
+	ScannedAt        time.Time
 }
 
 // initDB initializes the database connection.
@@ -38,8 +40,12 @@ func createTable() error {
 		script_url VARCHAR(2083) NOT NULL,
 		checksum VARCHAR(64) NOT NULL,
 		library_name VARCHAR(255),
+		library_version VARCHAR(100),
+		identified_by VARCHAR(50),
 		scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		date DATE
+		date DATE,
+		INDEX idx_library (library_name),
+		INDEX idx_checksum (checksum)
 	);`
 	if _, err := db.Exec(query); err != nil {
 		return err
@@ -65,8 +71,8 @@ func createTable() error {
 
 // storeResult stores a scan result in the database.
 func storeResult(result ScanResult) error {
-	query := "INSERT INTO scan_results (url, script_url, checksum, library_name, date) VALUES (?, ?, ?, ?, ?)"
-	_, err := db.Exec(query, result.URL, result.ScriptURL, result.Checksum, result.LibraryName, time.Now().Format("2006-01-02"))
+	query := "INSERT INTO scan_results (url, script_url, checksum, library_name, library_version, identified_by, date) VALUES (?, ?, ?, ?, ?, ?, ?)"
+	_, err := db.Exec(query, result.URL, result.ScriptURL, result.Checksum, result.LibraryName, result.LibraryVersion, result.IdentifiedBy, time.Now().Format("2006-01-02"))
 	return err
 }
 
@@ -81,8 +87,11 @@ type Statistics struct {
 
 // LibraryUsage represents library usage statistics
 type LibraryUsage struct {
-	Name  string
-	Count int
+	Name         string
+	Version      string
+	Checksum     string
+	Count        int
+	IdentifiedBy string
 }
 
 // RecentScan represents a recent scan entry
@@ -133,11 +142,16 @@ func getOverallStatistics() (*Statistics, error) {
 // getLibraryStatistics retrieves library usage statistics
 func getLibraryStatistics() ([]LibraryUsage, error) {
 	query := `
-		SELECT library_name, COUNT(*) as count 
+		SELECT 
+			library_name, 
+			COALESCE(library_version, '') as library_version,
+			checksum,
+			COUNT(*) as count,
+			MAX(identified_by) as identified_by
 		FROM scan_results 
 		WHERE library_name IS NOT NULL AND library_name != '' 
-		GROUP BY library_name 
-		ORDER BY count DESC, library_name ASC
+		GROUP BY library_name, library_version, checksum 
+		ORDER BY count DESC, library_name ASC, library_version ASC
 	`
 	
 	rows, err := db.Query(query)
@@ -149,7 +163,7 @@ func getLibraryStatistics() ([]LibraryUsage, error) {
 	var libraries []LibraryUsage
 	for rows.Next() {
 		var lib LibraryUsage
-		if err := rows.Scan(&lib.Name, &lib.Count); err != nil {
+		if err := rows.Scan(&lib.Name, &lib.Version, &lib.Checksum, &lib.Count, &lib.IdentifiedBy); err != nil {
 			return nil, err
 		}
 		libraries = append(libraries, lib)
