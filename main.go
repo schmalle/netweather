@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -17,6 +16,12 @@ import (
 func main() {
 	initLogger("netweather.log")
 	logger.Println("Application started")
+
+	// Initialize the database connection.
+	// TODO: Replace with your actual database connection string.
+	if err := initDB("user:password@tcp(127.0.0.1:3306)/database"); err != nil {
+		logger.Fatalf("Could not initialize database: %v", err)
+	}
 
 	fmt.Println("NetWeather - URL Scanner")
 	if len(os.Args) < 2 {
@@ -157,16 +162,4 @@ func printHelp() {
 	fmt.Println("Usage: netweather <url_file>")
 	fmt.Println("Options:")
 	fmt.Println("  <url_file>   File containing a list of URLs to scan.")
-}
-
-var logger *log.Logger
-
-func initLogger(logFile string) {
-	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		fmt.Printf("Error opening log file: %v\n", err)
-		return
-	}
-
-	logger = log.New(file, "", log.Ldate|log.Ltime|log.Lshortfile)
 }
