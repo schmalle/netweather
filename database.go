@@ -50,3 +50,119 @@ func storeResult(result ScanResult) error {
 	_, err := db.Exec(query, result.URL, result.ScriptURL, result.Checksum, result.LibraryName, time.Now().Format("2006-01-02"))
 	return err
 }
+
+// Statistics represents overall scan statistics
+type Statistics struct {
+	TotalURLs       int
+	TotalScripts    int
+	UniqueLibraries int
+	FirstScan       *time.Time
+	LastScan        *time.Time
+}
+
+// LibraryUsage represents library usage statistics
+type LibraryUsage struct {
+	Name  string
+	Count int
+}
+
+// RecentScan represents a recent scan entry
+type RecentScan struct {
+	URL       string
+	ScannedAt time.Time
+}
+
+// getOverallStatistics retrieves overall statistics from the database
+func getOverallStatistics() (*Statistics, error) {
+	stats := &Statistics{}
+	
+	// Get total unique URLs
+	err := db.QueryRow("SELECT COUNT(DISTINCT url) FROM scan_results").Scan(&stats.TotalURLs)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Get total scripts
+	err = db.QueryRow("SELECT COUNT(*) FROM scan_results").Scan(&stats.TotalScripts)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Get unique libraries (excluding Unknown and empty)
+	err = db.QueryRow("SELECT COUNT(DISTINCT library_name) FROM scan_results WHERE library_name IS NOT NULL AND library_name != '' AND library_name != 'Unknown'").Scan(&stats.UniqueLibraries)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Get first and last scan times
+	var firstScan, lastScan sql.NullTime
+	err = db.QueryRow("SELECT MIN(scanned_at), MAX(scanned_at) FROM scan_results").Scan(&firstScan, &lastScan)
+	if err != nil {
+		return nil, err
+	}
+	
+	if firstScan.Valid {
+		stats.FirstScan = &firstScan.Time
+	}
+	if lastScan.Valid {
+		stats.LastScan = &lastScan.Time
+	}
+	
+	return stats, nil
+}
+
+// getLibraryStatistics retrieves library usage statistics
+func getLibraryStatistics() ([]LibraryUsage, error) {
+	query := `
+		SELECT library_name, COUNT(*) as count 
+		FROM scan_results 
+		WHERE library_name IS NOT NULL AND library_name != '' 
+		GROUP BY library_name 
+		ORDER BY count DESC, library_name ASC
+	`
+	
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	var libraries []LibraryUsage
+	for rows.Next() {
+		var lib LibraryUsage
+		if err := rows.Scan(&lib.Name, &lib.Count); err != nil {
+			return nil, err
+		}
+		libraries = append(libraries, lib)
+	}
+	
+	return libraries, rows.Err()
+}
+
+// getRecentScans retrieves the most recent scans
+func getRecentScans(limit int) ([]RecentScan, error) {
+	query := `
+		SELECT DISTINCT url, MAX(scanned_at) as last_scan 
+		FROM scan_results 
+		GROUP BY url 
+		ORDER BY last_scan DESC 
+		LIMIT ?
+	`
+	
+	rows, err := db.Query(query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	var scans []RecentScan
+	for rows.Next() {
+		var scan RecentScan
+		if err := rows.Scan(&scan.URL, &scan.ScannedAt); err != nil {
+			return nil, err
+		}
+		scans = append(scans, scan)
+	}
+	
+	return scans, rows.Err()
+}

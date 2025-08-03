@@ -24,6 +24,7 @@ func main() {
 		dbUser     = flag.String("db-user", "", "Database user")
 		dbPassword = flag.String("db-password", "", "Database password")
 		dbName     = flag.String("db-name", "", "Database name")
+		stats      = flag.Bool("stats", false, "Show statistics of scanned URLs")
 	)
 	flag.Parse()
 
@@ -36,20 +37,15 @@ func main() {
 	}
 
 	fmt.Println("NetWeather - URL Scanner")
-	if flag.NArg() < 1 {
-		printHelp()
-		os.Exit(1)
+	
+	// Check if stats flag is set
+	if *stats {
+		// Stats mode requires database connection
+		*useDB = true
 	}
 
-	filePath := flag.Arg(0)
-	urls, err := readLines(filePath)
-	if err != nil {
-		fmt.Printf("Error reading file: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Initialize database if flag is set
-	if *useDB {
+	// Initialize database if flag is set or stats is requested
+	if *useDB || *stats {
 		// Get database credentials from command line or environment variables
 		host := getConfigValue(*dbHost, "DB_HOST", "127.0.0.1")
 		port := getConfigValue(*dbPort, "DB_PORT", "3306")
@@ -69,6 +65,25 @@ func main() {
 		if err := createTable(); err != nil {
 			logger.Fatalf("Could not create table: %v", err)
 		}
+	}
+
+	// If stats flag is set, show statistics and exit
+	if *stats {
+		showStatistics()
+		os.Exit(0)
+	}
+
+	// Regular scanning mode requires a URL file
+	if flag.NArg() < 1 {
+		printHelp()
+		os.Exit(1)
+	}
+
+	filePath := flag.Arg(0)
+	urls, err := readLines(filePath)
+	if err != nil {
+		fmt.Printf("Error reading file: %v\n", err)
+		os.Exit(1)
 	}
 
 	for _, url := range urls {
@@ -193,6 +208,7 @@ func readLines(path string) ([]string, error) {
 
 func printHelp() {
 	fmt.Println("Usage: netweather [options] <url_file>")
+	fmt.Println("       netweather -stats [db-options]")
 	fmt.Println("Options:")
 	fmt.Println("  -db              Activate database storage")
 	fmt.Println("  -db-host         Database host (default: 127.0.0.1, env: DB_HOST)")
@@ -200,6 +216,7 @@ func printHelp() {
 	fmt.Println("  -db-user         Database user (env: DB_USER)")
 	fmt.Println("  -db-password     Database password (env: DB_PASSWORD)")
 	fmt.Println("  -db-name         Database name (env: DB_NAME)")
+	fmt.Println("  -stats           Show statistics of scanned URLs")
 	fmt.Println("  <url_file>       File containing a list of URLs to scan.")
 }
 
@@ -212,4 +229,63 @@ func getConfigValue(cmdValue, envKey, defaultValue string) string {
 		return envValue
 	}
 	return defaultValue
+}
+
+// showStatistics displays statistics from the database
+func showStatistics() {
+	fmt.Println("\n=== NetWeather Statistics ===\n")
+	
+	// Get overall statistics
+	stats, err := getOverallStatistics()
+	if err != nil {
+		fmt.Printf("Error retrieving statistics: %v\n", err)
+		return
+	}
+	
+	fmt.Printf("Total URLs scanned: %d\n", stats.TotalURLs)
+	fmt.Printf("Total scripts found: %d\n", stats.TotalScripts)
+	fmt.Printf("Unique libraries identified: %d\n", stats.UniqueLibraries)
+	
+	if stats.FirstScan != nil {
+		fmt.Printf("First scan: %s\n", stats.FirstScan.Format("2006-01-02 15:04:05"))
+	}
+	if stats.LastScan != nil {
+		fmt.Printf("Last scan: %s\n", stats.LastScan.Format("2006-01-02 15:04:05"))
+	}
+	
+	// Get library usage statistics
+	fmt.Println("\n=== Library Usage ===")
+	libraries, err := getLibraryStatistics()
+	if err != nil {
+		fmt.Printf("Error retrieving library statistics: %v\n", err)
+		return
+	}
+	
+	if len(libraries) == 0 {
+		fmt.Println("No libraries found in database.")
+		return
+	}
+	
+	fmt.Println()
+	for _, lib := range libraries {
+		fmt.Printf("%-40s: %d occurrences\n", lib.Name, lib.Count)
+	}
+	
+	// Get recent scans
+	fmt.Println("\n=== Recent Scans ===")
+	recentURLs, err := getRecentScans(10)
+	if err != nil {
+		fmt.Printf("Error retrieving recent scans: %v\n", err)
+		return
+	}
+	
+	if len(recentURLs) == 0 {
+		fmt.Println("No recent scans found.")
+		return
+	}
+	
+	fmt.Println()
+	for _, scan := range recentURLs {
+		fmt.Printf("%s - %s\n", scan.ScannedAt.Format("2006-01-02 15:04:05"), scan.URL)
+	}
 }
