@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -14,6 +15,7 @@ type ScanResult struct {
 	ScriptURL   string
 	Checksum    string
 	LibraryName string
+	ScannedAt   time.Time
 }
 
 // initDB initializes the database connection.
@@ -35,7 +37,8 @@ func createTable() error {
 		script_url VARCHAR(2083) NOT NULL,
 		checksum VARCHAR(64) NOT NULL,
 		library_name VARCHAR(255),
-		scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		date DATE
 	);`
 	_, err := db.Exec(query)
 	return err
@@ -43,7 +46,7 @@ func createTable() error {
 
 // storeResult stores a scan result in the database.
 func storeResult(result ScanResult) error {
-	query := "INSERT INTO scan_results (url, script_url, checksum, library_name) VALUES (?, ?, ?, ?)"
-	_, err := db.Exec(query, result.URL, result.ScriptURL, result.Checksum, result.LibraryName)
+	query := "INSERT INTO scan_results (url, script_url, checksum, library_name, date) VALUES (?, ?, ?, ?, ?)"
+	_, err := db.Exec(query, result.URL, result.ScriptURL, result.Checksum, result.LibraryName, time.Now().Format("2006-01-02"))
 	return err
 }
