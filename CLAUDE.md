@@ -5,11 +5,15 @@
 NetWeather is a Go command-line application that scans websites for embedded JavaScript libraries, computes their checksums, and identifies them using an external API. The primary use case is security monitoring and dependency tracking for web applications.
 
 ### Key Features
+- Checks URL reachability via HTTP and HTTPS before scanning
+- Handles URLs without protocol prefix (automatically tests both HTTP/HTTPS)
+- Follows redirects and stores redirect information
+- Records HTTP/HTTPS status codes and availability
 - Parses command-line arguments for URL input files
 - Scans HTML pages for `<script>` tags with external JavaScript sources
 - Computes SHA-256 checksums of JavaScript libraries
 - Identifies libraries using the publicdata.guru API
-- Stores scan results in a MySQL/MariaDB database
+- Stores scan results and reachability data in a MySQL/MariaDB database
 - Provides comprehensive logging and error handling
 - Clean command-line output with progress feedback
 
@@ -22,6 +26,7 @@ NetWeather is a Go command-line application that scans websites for embedded Jav
 ├── api.go              # External API integration for library identification
 ├── logger.go           # Logging configuration and utilities
 ├── nmap.go             # Docker/NMAP integration for port scanning
+├── reachability.go     # URL reachability checking with HTTP/HTTPS support
 ├── go.mod              # Go module dependencies
 ├── go.sum              # Dependency checksums
 ├── urls.txt            # Sample input file with URLs to scan
@@ -62,9 +67,15 @@ NetWeather is a Go command-line application that scans websites for embedded Jav
 
 ### 2. Database Layer (`database.go`)
 - **Connection management**: MySQL/MariaDB database connectivity
-- **Schema**: `scan_results` table with fields for URL, script URL, checksum, library name, and timestamp
-- **Data model**: `ScanResult` struct representing scan results
+- **Schema**: 
+  - `scan_results` table: Stores JavaScript library scan results
+  - `url_reachability` table: Stores HTTP/HTTPS availability and redirect information
+  - `nmap_batches` table: Stores port scanning results
+- **Data models**: 
+  - `ScanResult` struct for JavaScript library results
+  - `URLReachability` struct for reachability data
 - **Storage**: Persistent storage of all scan results with timestamps
+- **Statistics**: Functions for retrieving scan and reachability statistics
 
 ### 3. External API Integration (`api.go`)
 - **Library identification**: Uses publicdata.guru API to identify JavaScript libraries by checksum
@@ -76,6 +87,14 @@ NetWeather is a Go command-line application that scans websites for embedded Jav
 - **File-based logging**: All events logged to `netweather.log`
 - **Log format**: Timestamped entries with "netweather:" prefix
 - **Coverage**: Application lifecycle, URL processing, errors, and API responses
+
+### 5. URL Reachability Checker (`reachability.go`)
+- **Protocol checking**: Tests URLs for HTTP and HTTPS availability
+- **Redirect handling**: Follows redirects and records redirect chains
+- **Smart URL parsing**: Handles URLs without protocol prefix by testing both variants
+- **Status tracking**: Records HTTP status codes for each protocol
+- **Timeout management**: Uses 10-second timeout for connection attempts
+- **Data model**: `URLReachability` struct for storing reachability information
 
 ## Development Workflow
 

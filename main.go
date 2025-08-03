@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"golang.org/x/net/html"
@@ -29,6 +30,7 @@ func main() {
 		scanPorts   = flag.String("scan-ports", "80,443,8080,8443", "Ports to scan (default: common web ports)")
 		nmapOptions = flag.String("nmap-options", "", "Additional nmap options")
 		useRemoteDB = flag.Bool("remote-db", false, "Use remote entries.db from GitHub instead of local file")
+		verbose     = flag.Bool("verbose", false, "Enable verbose output (shows all URLs including non-200 responses)")
 	)
 	flag.Parse()
 
@@ -96,27 +98,155 @@ func main() {
 		os.Exit(1)
 	}
 
+	totalURLs := len(urls)
+	processedCount := 0
+	scannedCount := 0
+	skippedCount := 0
+	errorCount := 0
+	
+	// Show initial progress in non-verbose mode
+	if !*verbose {
+		fmt.Printf("Processing %d URLs...\n", totalURLs)
+		fmt.Print("Progress: ")
+	}
+	
 	for _, url := range urls {
-		logger.Printf("Scanning URL: %s\n", url)
-		fmt.Printf("Scanning URL: %s\n", url)
-		scanURL(url, *useDB)
+		processedCount++
+		logger.Printf("Processing URL: %s\n", url)
+		
+		if *verbose {
+			fmt.Printf("\nProcessing URL: %s\n", url)
+		}
+		
+		// First check URL reachability
+		reachability, err := checkURLReachability(url)
+		if err != nil {
+			errorCount++
+			logger.Printf("Error checking reachability for %s: %v\n", url, err)
+			if *verbose {
+				fmt.Printf("  - Error checking reachability: %v\n", err)
+			}
+			updateProgress(processedCount, totalURLs, *verbose)
+			continue
+		}
+		
+		// Display reachability information
+		if reachability.HTTPAvailable || reachability.HTTPSAvailable {
+			if *verbose {
+				protocols := []string{}
+				if reachability.HTTPAvailable {
+					protocols = append(protocols, fmt.Sprintf("HTTP (%d)", reachability.HTTPStatusCode))
+				}
+				if reachability.HTTPSAvailable {
+					protocols = append(protocols, fmt.Sprintf("HTTPS (%d)", reachability.HTTPSStatusCode))
+				}
+				fmt.Printf("  - Reachable via: %s\n", strings.Join(protocols, ", "))
+				
+				if reachability.HTTPRedirectURL != "" || reachability.HTTPSRedirectURL != "" {
+					fmt.Printf("  - Redirects detected\n")
+				}
+				
+				if reachability.FinalURL != "" && reachability.FinalURL != url {
+					fmt.Printf("  - Final URL: %s\n", reachability.FinalURL)
+				}
+			}
+		} else {
+			errorCount++
+			if *verbose {
+				fmt.Printf("  - URL not reachable\n")
+			}
+			logger.Printf("URL %s is not reachable\n", url)
+			
+			// Store reachability result even if not reachable
+			if *useDB {
+				if err := storeURLReachability(reachability); err != nil {
+					logger.Printf("Error storing reachability data for %s: %v\n", url, err)
+				}
+			}
+			updateProgress(processedCount, totalURLs, *verbose)
+			continue
+		}
+		
+		// Store reachability data in database
+		if *useDB {
+			if err := storeURLReachability(reachability); err != nil {
+				logger.Printf("Error storing reachability data for %s: %v\n", url, err)
+			}
+		}
+		
+		// Check if we got a successful response (HTTP 200)
+		if !reachability.HasSuccessfulResponse() {
+			skippedCount++
+			logger.Printf("Skipping JavaScript scanning for %s - no HTTP 200 response (HTTP: %d, HTTPS: %d)\n", 
+				url, reachability.HTTPStatusCode, reachability.HTTPSStatusCode)
+			if *verbose {
+				fmt.Printf("  - Skipping JavaScript scan (no HTTP 200 response)\n")
+			}
+			updateProgress(processedCount, totalURLs, *verbose)
+			continue
+		}
+		
+		// Scan the final URL (after redirects)
+		finalURL := reachability.FinalURL
+		if finalURL == "" {
+			finalURL = url
+		}
+		
+		scannedCount++
+		logger.Printf("Scanning URL: %s\n", finalURL)
+		
+		if *verbose {
+			fmt.Printf("  - Scanning for JavaScript libraries...\n")
+		} else {
+			// Show which URL we're scanning in non-verbose mode
+			fmt.Printf("\n[%d/%d] Scanning: %s", processedCount, totalURLs, finalURL)
+		}
+		
+		scanURL(finalURL, *useDB, *verbose)
 		
 		// Perform port scan if enabled
 		if *portScan {
-			logger.Printf("Port scanning URL: %s\n", url)
-			fmt.Printf("  - Port scanning: %s\n", url)
-			performPortScan(url, *scanPorts, *nmapOptions)
+			logger.Printf("Port scanning URL: %s\n", finalURL)
+			if *verbose {
+				fmt.Printf("  - Port scanning: %s\n", finalURL)
+			}
+			performPortScan(finalURL, *scanPorts, *nmapOptions)
 		}
+		
+		updateProgress(processedCount, totalURLs, *verbose)
+	}
+	
+	// Final summary
+	if !*verbose {
+		fmt.Printf("\n\nScan completed!\n")
+		fmt.Printf("Total URLs processed: %d\n", processedCount)
+		fmt.Printf("Successfully scanned: %d\n", scannedCount)
+		fmt.Printf("Skipped (non-200): %d\n", skippedCount)
+		fmt.Printf("Errors/Unreachable: %d\n", errorCount)
 	}
 	logger.Println("Application finished")
 }
 
-func scanURL(baseURL string, useDB bool) {
+// updateProgress shows progress indicator for non-verbose mode
+func updateProgress(current, total int, verbose bool) {
+	if !verbose {
+		// Simple progress dots
+		if current%10 == 0 || current == total {
+			fmt.Printf(" %d", current)
+		} else {
+			fmt.Print(".")
+		}
+	}
+}
+
+func scanURL(baseURL string, useDB bool, verbose bool) {
 	logger.Printf("Fetching URL %s\n", baseURL)
 	resp, err := http.Get(baseURL)
 	if err != nil {
 		logger.Printf("Error fetching URL %s: %v\n", baseURL, err)
-		fmt.Printf("Error fetching URL %s: %v\n", baseURL, err)
+		if verbose {
+			fmt.Printf("Error fetching URL %s: %v\n", baseURL, err)
+		}
 		return
 	}
 	defer resp.Body.Close()
@@ -124,7 +254,9 @@ func scanURL(baseURL string, useDB bool) {
 	doc, err := html.Parse(resp.Body)
 	if err != nil {
 		logger.Printf("Error parsing HTML from %s: %v\n", baseURL, err)
-		fmt.Printf("Error parsing HTML from %s: %v\n", baseURL, err)
+		if verbose {
+			fmt.Printf("Error parsing HTML from %s: %v\n", baseURL, err)
+		}
 		return
 	}
 
@@ -144,25 +276,34 @@ func scanURL(baseURL string, useDB bool) {
 	}
 	f(doc)
 
+	scriptsFound := 0
 	for _, scriptURL := range scripts {
 		fullScriptURL := toAbsoluteURL(baseURL, scriptURL)
 		logger.Printf("Processing script %s\n", fullScriptURL)
 		checksum, jsCode, err := getScriptChecksumAndContent(fullScriptURL)
 		if err != nil {
 			logger.Printf("Error processing script %s: %v\n", fullScriptURL, err)
-			fmt.Printf("Error processing script %s: %v\n", fullScriptURL, err)
+			if verbose {
+				fmt.Printf("Error processing script %s: %v\n", fullScriptURL, err)
+			}
 			continue
 		}
+		scriptsFound++
 		logger.Printf("Found script: %s, Checksum: %s\n", fullScriptURL, checksum)
-		fmt.Printf("  - Found script: %s, Checksum: %s\n", fullScriptURL, checksum)
+		
+		if verbose {
+			fmt.Printf("  - Found script: %s, Checksum: %s\n", fullScriptURL, checksum)
+		}
 
 		libraryInfo := identifyLibrary(fullScriptURL, checksum, jsCode)
 		if libraryInfo != nil {
 			logger.Printf("Identified library for %s as: %s v%s (%s) [checksum: %s]\n", fullScriptURL, libraryInfo.Name, libraryInfo.Version, libraryInfo.Method, libraryInfo.Checksum)
-			if libraryInfo.Version != "unknown" && libraryInfo.Version != "" {
-				fmt.Printf("    Library: %s v%s (%s) [%s...]\n", libraryInfo.Name, libraryInfo.Version, libraryInfo.Method, libraryInfo.Checksum[:8])
-			} else {
-				fmt.Printf("    Library: %s (%s) [%s...]\n", libraryInfo.Name, libraryInfo.Method, libraryInfo.Checksum[:8])
+			if verbose {
+				if libraryInfo.Version != "unknown" && libraryInfo.Version != "" {
+					fmt.Printf("    Library: %s v%s (%s) [%s...]\n", libraryInfo.Name, libraryInfo.Version, libraryInfo.Method, libraryInfo.Checksum[:8])
+				} else {
+					fmt.Printf("    Library: %s (%s) [%s...]\n", libraryInfo.Name, libraryInfo.Method, libraryInfo.Checksum[:8])
+				}
 			}
 		}
 
@@ -179,6 +320,11 @@ func scanURL(baseURL string, useDB bool) {
 				logger.Printf("Error storing result for %s: %v\n", fullScriptURL, err)
 			}
 		}
+	}
+	
+	// Show summary for non-verbose mode
+	if !verbose {
+		fmt.Printf(" → %d scripts found", scriptsFound)
 	}
 }
 
@@ -244,7 +390,17 @@ func printHelp() {
 	fmt.Println("  -port-scan       Enable port scanning with nmap")
 	fmt.Println("  -scan-ports      Ports to scan (default: 80,443,8080,8443)")
 	fmt.Println("  -nmap-options    Additional nmap options")
+	fmt.Println("  -remote-db       Use remote entries.db from GitHub")
+	fmt.Println("  -verbose         Enable verbose output (default: false)")
 	fmt.Println("  <url_file>       File containing a list of URLs to scan.")
+	fmt.Println()
+	fmt.Println("Features:")
+	fmt.Println("  - Checks URL reachability via HTTP and HTTPS")
+	fmt.Println("  - Follows redirects and scans the final URL")
+	fmt.Println("  - Stores reachability information in database")
+	fmt.Println("  - Handles URLs without protocol prefix (tests both HTTP/HTTPS)")
+	fmt.Println("  - Skips JavaScript scanning for non-200 responses")
+	fmt.Println("  - Clean, progress-based output in non-verbose mode")
 }
 
 // getConfigValue returns the first non-empty value from command line, environment, or default
@@ -323,6 +479,23 @@ func showStatistics() {
 	fmt.Println()
 	for _, scan := range recentURLs {
 		fmt.Printf("%s - %s\n", scan.ScannedAt.Format("2006-01-02 15:04:05"), scan.URL)
+	}
+	
+	// Get URL reachability statistics
+	fmt.Println("\n=== URL Reachability ===")
+	reachStats, err := getURLReachabilityStatistics()
+	if err != nil {
+		fmt.Printf("Error retrieving reachability statistics: %v\n", err)
+	} else if reachStats.TotalChecked > 0 {
+		fmt.Println()
+		fmt.Printf("Total URLs checked: %d\n", reachStats.TotalChecked)
+		fmt.Printf("HTTP only: %d\n", reachStats.HTTPOnlyCount)
+		fmt.Printf("HTTPS only: %d\n", reachStats.HTTPSOnlyCount)
+		fmt.Printf("Both HTTP & HTTPS: %d\n", reachStats.BothProtocolsCount)
+		fmt.Printf("Unreachable: %d\n", reachStats.UnreachableCount)
+		fmt.Printf("URLs with redirects: %d\n", reachStats.RedirectCount)
+	} else {
+		fmt.Println("No URL reachability data found.")
 	}
 	
 	// Get nmap batch statistics
