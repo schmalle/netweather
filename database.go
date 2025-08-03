@@ -30,6 +30,7 @@ func initDB(dataSourceName string) error {
 
 // createTable creates the necessary table in the database if it doesn't exist.
 func createTable() error {
+	// Create scan_results table
 	query := `
 	CREATE TABLE IF NOT EXISTS scan_results (
 		id INT AUTO_INCREMENT PRIMARY KEY,
@@ -40,7 +41,25 @@ func createTable() error {
 		scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		date DATE
 	);`
-	_, err := db.Exec(query)
+	if _, err := db.Exec(query); err != nil {
+		return err
+	}
+
+	// Create nmap_batches table for tracking port scan batches
+	nmapQuery := `
+	CREATE TABLE IF NOT EXISTS nmap_batches (
+		id INT AUTO_INCREMENT PRIMARY KEY,
+		batch_id VARCHAR(255) NOT NULL UNIQUE,
+		url VARCHAR(2083) NOT NULL,
+		status VARCHAR(50) NOT NULL,
+		ports TEXT,
+		results TEXT,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+		INDEX idx_batch_id (batch_id),
+		INDEX idx_status (status)
+	);`
+	_, err := db.Exec(nmapQuery)
 	return err
 }
 
@@ -165,4 +184,31 @@ func getRecentScans(limit int) ([]RecentScan, error) {
 	}
 	
 	return scans, rows.Err()
+}
+
+// getNmapBatchStatistics retrieves nmap batch statistics
+func getNmapBatchStatistics() (map[string]int, error) {
+	query := `
+		SELECT status, COUNT(*) as count 
+		FROM nmap_batches 
+		GROUP BY status
+	`
+	
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	
+	stats := make(map[string]int)
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, err
+		}
+		stats[status] = count
+	}
+	
+	return stats, rows.Err()
 }
