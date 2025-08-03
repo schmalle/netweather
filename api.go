@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"regexp"
@@ -54,13 +55,22 @@ var checksumCache = &ChecksumCache{
 
 // FileChecksumDB holds the file-based checksum database
 type FileChecksumDB struct {
-	entries map[string]*LibraryInfo
-	mutex   sync.RWMutex
-	loaded  bool
+	entries   map[string]*LibraryInfo
+	mutex     sync.RWMutex
+	loaded    bool
+	useRemote bool
 }
 
 var fileChecksumDB = &FileChecksumDB{
 	entries: make(map[string]*LibraryInfo),
+}
+
+// SetRemoteDB configures whether to use remote database
+func SetRemoteDB(useRemote bool) {
+	fileChecksumDB.mutex.Lock()
+	defer fileChecksumDB.mutex.Unlock()
+	fileChecksumDB.useRemote = useRemote
+	fileChecksumDB.loaded = false // Force reload with new setting
 }
 
 // LibraryInfo holds identified library information
@@ -627,6 +637,26 @@ func addToKnownChecksums(checksum string, info *LibraryInfo) {
 	checksumCache.Set(checksum, info)
 }
 
+// downloadRemoteDB downloads entries.db from GitHub
+func (fdb *FileChecksumDB) downloadRemoteDB() (io.ReadCloser, error) {
+	const remoteURL = "https://raw.githubusercontent.com/schmalle/netweather/main/entries.db"
+	
+	logger.Printf("Downloading remote entries.db from: %s\n", remoteURL)
+	
+	resp, err := http.Get(remoteURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download remote entries.db: %v", err)
+	}
+	
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		return nil, fmt.Errorf("failed to download remote entries.db: HTTP %d", resp.StatusCode)
+	}
+	
+	logger.Printf("Successfully downloaded remote entries.db\n")
+	return resp.Body, nil
+}
+
 // loadFileChecksumDB loads checksums from entries.db file
 func (fdb *FileChecksumDB) loadFileChecksumDB() error {
 	fdb.mutex.Lock()
@@ -636,15 +666,32 @@ func (fdb *FileChecksumDB) loadFileChecksumDB() error {
 		return nil // Already loaded
 	}
 
-	file, err := os.Open("entries.db")
-	if err != nil {
-		// File doesn't exist, that's ok
-		fdb.loaded = true
-		return nil
+	var reader io.ReadCloser
+	var err error
+	
+	if fdb.useRemote {
+		reader, err = fdb.downloadRemoteDB()
+		if err != nil {
+			logger.Printf("Failed to download remote entries.db, falling back to local: %v\n", err)
+			// Fall back to local file
+			reader, err = os.Open("entries.db")
+			if err != nil {
+				// Neither remote nor local available
+				fdb.loaded = true
+				return nil
+			}
+		}
+	} else {
+		reader, err = os.Open("entries.db")
+		if err != nil {
+			// File doesn't exist, that's ok
+			fdb.loaded = true
+			return nil
+		}
 	}
-	defer file.Close()
+	defer reader.Close()
 
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(reader)
 	lineNum := 0
 	
 	for scanner.Scan() {
@@ -687,7 +734,11 @@ func (fdb *FileChecksumDB) loadFileChecksumDB() error {
 	}
 
 	fdb.loaded = true
-	logger.Printf("Loaded %d entries from entries.db\n", len(fdb.entries))
+	source := "local"
+	if fdb.useRemote {
+		source = "remote"
+	}
+	logger.Printf("Loaded %d entries from %s entries.db\n", len(fdb.entries), source)
 	return nil
 }
 
