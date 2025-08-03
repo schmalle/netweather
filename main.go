@@ -18,13 +18,16 @@ import (
 func main() {
 	// Define command line flags
 	var (
-		useDB      = flag.Bool("db", false, "Activate database storage")
-		dbHost     = flag.String("db-host", "", "Database host")
-		dbPort     = flag.String("db-port", "", "Database port")
-		dbUser     = flag.String("db-user", "", "Database user")
-		dbPassword = flag.String("db-password", "", "Database password")
-		dbName     = flag.String("db-name", "", "Database name")
-		stats      = flag.Bool("stats", false, "Show statistics of scanned URLs")
+		useDB       = flag.Bool("db", false, "Activate database storage")
+		dbHost      = flag.String("db-host", "", "Database host")
+		dbPort      = flag.String("db-port", "", "Database port")
+		dbUser      = flag.String("db-user", "", "Database user")
+		dbPassword  = flag.String("db-password", "", "Database password")
+		dbName      = flag.String("db-name", "", "Database name")
+		stats       = flag.Bool("stats", false, "Show statistics of scanned URLs")
+		portScan    = flag.Bool("port-scan", false, "Enable port scanning with nmap")
+		scanPorts   = flag.String("scan-ports", "80,443,8080,8443", "Ports to scan (default: common web ports)")
+		nmapOptions = flag.String("nmap-options", "", "Additional nmap options")
 	)
 	flag.Parse()
 
@@ -90,6 +93,13 @@ func main() {
 		logger.Printf("Scanning URL: %s\n", url)
 		fmt.Printf("Scanning URL: %s\n", url)
 		scanURL(url, *useDB)
+		
+		// Perform port scan if enabled
+		if *portScan {
+			logger.Printf("Port scanning URL: %s\n", url)
+			fmt.Printf("  - Port scanning: %s\n", url)
+			performPortScan(url, *scanPorts, *nmapOptions)
+		}
 	}
 	logger.Println("Application finished")
 }
@@ -217,6 +227,9 @@ func printHelp() {
 	fmt.Println("  -db-password     Database password (env: DB_PASSWORD)")
 	fmt.Println("  -db-name         Database name (env: DB_NAME)")
 	fmt.Println("  -stats           Show statistics of scanned URLs")
+	fmt.Println("  -port-scan       Enable port scanning with nmap")
+	fmt.Println("  -scan-ports      Ports to scan (default: 80,443,8080,8443)")
+	fmt.Println("  -nmap-options    Additional nmap options")
 	fmt.Println("  <url_file>       File containing a list of URLs to scan.")
 }
 
@@ -287,5 +300,23 @@ func showStatistics() {
 	fmt.Println()
 	for _, scan := range recentURLs {
 		fmt.Printf("%s - %s\n", scan.ScannedAt.Format("2006-01-02 15:04:05"), scan.URL)
+	}
+	
+	// Get nmap batch statistics
+	fmt.Println("\n=== Port Scan Batches ===")
+	nmapStats, err := getNmapBatchStatistics()
+	if err != nil {
+		fmt.Printf("Error retrieving batch statistics: %v\n", err)
+		return
+	}
+	
+	if len(nmapStats) == 0 {
+		fmt.Println("No port scan batches found.")
+		return
+	}
+	
+	fmt.Println()
+	for status, count := range nmapStats {
+		fmt.Printf("%-15s: %d batches\n", status, count)
 	}
 }
