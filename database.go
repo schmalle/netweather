@@ -65,7 +65,28 @@ func createTable() error {
 		INDEX idx_batch_id (batch_id),
 		INDEX idx_status (status)
 	);`
-	_, err := db.Exec(nmapQuery)
+	if _, err := db.Exec(nmapQuery); err != nil {
+		return err
+	}
+
+	// Create url_reachability table
+	reachabilityQuery := `
+	CREATE TABLE IF NOT EXISTS url_reachability (
+		id INT AUTO_INCREMENT PRIMARY KEY,
+		original_url VARCHAR(2083) NOT NULL,
+		http_available BOOLEAN DEFAULT FALSE,
+		https_available BOOLEAN DEFAULT FALSE,
+		http_status_code INT,
+		https_status_code INT,
+		http_redirect_url VARCHAR(2083),
+		https_redirect_url VARCHAR(2083),
+		final_url VARCHAR(2083),
+		scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		INDEX idx_original_url (original_url),
+		INDEX idx_scanned_at (scanned_at),
+		INDEX idx_availability (http_available, https_available)
+	);`
+	_, err := db.Exec(reachabilityQuery)
 	return err
 }
 
@@ -73,6 +94,39 @@ func createTable() error {
 func storeResult(result ScanResult) error {
 	query := "INSERT INTO scan_results (url, script_url, checksum, library_name, library_version, identified_by, date) VALUES (?, ?, ?, ?, ?, ?, ?)"
 	_, err := db.Exec(query, result.URL, result.ScriptURL, result.Checksum, result.LibraryName, result.LibraryVersion, result.IdentifiedBy, time.Now().Format("2006-01-02"))
+	return err
+}
+
+// storeURLReachability stores URL reachability information in the database
+func storeURLReachability(result *URLReachability) error {
+	query := `INSERT INTO url_reachability 
+		(original_url, http_available, https_available, http_status_code, https_status_code, 
+		 http_redirect_url, https_redirect_url, final_url) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	
+	// Convert empty strings to NULL for database storage
+	var httpRedirect, httpsRedirect, finalURL interface{}
+	if result.HTTPRedirectURL != "" {
+		httpRedirect = result.HTTPRedirectURL
+	}
+	if result.HTTPSRedirectURL != "" {
+		httpsRedirect = result.HTTPSRedirectURL
+	}
+	if result.FinalURL != "" {
+		finalURL = result.FinalURL
+	}
+	
+	// Convert zero status codes to NULL
+	var httpStatus, httpsStatus interface{}
+	if result.HTTPStatusCode > 0 {
+		httpStatus = result.HTTPStatusCode
+	}
+	if result.HTTPSStatusCode > 0 {
+		httpsStatus = result.HTTPSStatusCode
+	}
+	
+	_, err := db.Exec(query, result.OriginalURL, result.HTTPAvailable, result.HTTPSAvailable, 
+		httpStatus, httpsStatus, httpRedirect, httpsRedirect, finalURL)
 	return err
 }
 
@@ -225,4 +279,57 @@ func getNmapBatchStatistics() (map[string]int, error) {
 	}
 	
 	return stats, rows.Err()
+}
+
+// URLReachabilityStats represents statistics about URL reachability
+type URLReachabilityStats struct {
+	TotalChecked       int
+	HTTPOnlyCount      int
+	HTTPSOnlyCount     int
+	BothProtocolsCount int
+	UnreachableCount   int
+	RedirectCount      int
+}
+
+// getURLReachabilityStatistics retrieves URL reachability statistics
+func getURLReachabilityStatistics() (*URLReachabilityStats, error) {
+	stats := &URLReachabilityStats{}
+	
+	// Get total checked URLs
+	err := db.QueryRow("SELECT COUNT(*) FROM url_reachability").Scan(&stats.TotalChecked)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Get HTTP only count
+	err = db.QueryRow("SELECT COUNT(*) FROM url_reachability WHERE http_available = TRUE AND https_available = FALSE").Scan(&stats.HTTPOnlyCount)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Get HTTPS only count
+	err = db.QueryRow("SELECT COUNT(*) FROM url_reachability WHERE http_available = FALSE AND https_available = TRUE").Scan(&stats.HTTPSOnlyCount)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Get both protocols count
+	err = db.QueryRow("SELECT COUNT(*) FROM url_reachability WHERE http_available = TRUE AND https_available = TRUE").Scan(&stats.BothProtocolsCount)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Get unreachable count
+	err = db.QueryRow("SELECT COUNT(*) FROM url_reachability WHERE http_available = FALSE AND https_available = FALSE").Scan(&stats.UnreachableCount)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Get redirect count
+	err = db.QueryRow("SELECT COUNT(*) FROM url_reachability WHERE http_redirect_url IS NOT NULL OR https_redirect_url IS NOT NULL").Scan(&stats.RedirectCount)
+	if err != nil {
+		return nil, err
+	}
+	
+	return stats, nil
 }
