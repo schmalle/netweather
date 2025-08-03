@@ -140,7 +140,7 @@ func scanURL(baseURL string, useDB bool) {
 	for _, scriptURL := range scripts {
 		fullScriptURL := toAbsoluteURL(baseURL, scriptURL)
 		logger.Printf("Processing script %s\n", fullScriptURL)
-		checksum, err := getScriptChecksum(fullScriptURL)
+		checksum, jsCode, err := getScriptChecksumAndContent(fullScriptURL)
 		if err != nil {
 			logger.Printf("Error processing script %s: %v\n", fullScriptURL, err)
 			fmt.Printf("Error processing script %s: %v\n", fullScriptURL, err)
@@ -149,20 +149,24 @@ func scanURL(baseURL string, useDB bool) {
 		logger.Printf("Found script: %s, Checksum: %s\n", fullScriptURL, checksum)
 		fmt.Printf("  - Found script: %s, Checksum: %s\n", fullScriptURL, checksum)
 
-		libraryName, err := identifyLibrary(checksum)
-		if err != nil {
-			logger.Printf("Error identifying library for checksum %s: %v\n", checksum, err)
-		} else {
-			logger.Printf("Identified library for %s as: %s\n", fullScriptURL, libraryName)
-			fmt.Printf("    Library: %s\n", libraryName)
+		libraryInfo := identifyLibrary(fullScriptURL, checksum, jsCode)
+		if libraryInfo != nil {
+			logger.Printf("Identified library for %s as: %s v%s (%s) [checksum: %s]\n", fullScriptURL, libraryInfo.Name, libraryInfo.Version, libraryInfo.Method, libraryInfo.Checksum)
+			if libraryInfo.Version != "unknown" && libraryInfo.Version != "" {
+				fmt.Printf("    Library: %s v%s (%s) [%s...]\n", libraryInfo.Name, libraryInfo.Version, libraryInfo.Method, libraryInfo.Checksum[:8])
+			} else {
+				fmt.Printf("    Library: %s (%s) [%s...]\n", libraryInfo.Name, libraryInfo.Method, libraryInfo.Checksum[:8])
+			}
 		}
 
-		if useDB {
+		if useDB && libraryInfo != nil {
 			result := ScanResult{
-				URL:         baseURL,
-				ScriptURL:   fullScriptURL,
-				Checksum:    checksum,
-				LibraryName: libraryName,
+				URL:              baseURL,
+				ScriptURL:        fullScriptURL,
+				Checksum:         checksum,
+				LibraryName:      libraryInfo.Name,
+				LibraryVersion:   libraryInfo.Version,
+				IdentifiedBy:     libraryInfo.Method,
 			}
 			if err := storeResult(result); err != nil {
 				logger.Printf("Error storing result for %s: %v\n", fullScriptURL, err)
@@ -183,22 +187,25 @@ func toAbsoluteURL(base, href string) string {
 	return baseURL.ResolveReference(hrefURL).String()
 }
 
-func getScriptChecksum(scriptURL string) (string, error) {
-	logger.Printf("Getting checksum for %s\n", scriptURL)
+func getScriptChecksumAndContent(scriptURL string) (string, string, error) {
+	logger.Printf("Getting checksum and content for %s\n", scriptURL)
 	resp, err := http.Get(scriptURL)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		logger.Printf("Error reading script body from %s: %v\n", scriptURL, err)
-		return "", err
+		return "", "", err
 	}
 
 	hash := sha256.Sum256(body)
-	return hex.EncodeToString(hash[:]), nil
+	checksum := hex.EncodeToString(hash[:])
+	content := string(body)
+	
+	return checksum, content, nil
 }
 
 func readLines(path string) ([]string, error) {
@@ -281,7 +288,16 @@ func showStatistics() {
 	
 	fmt.Println()
 	for _, lib := range libraries {
-		fmt.Printf("%-40s: %d occurrences\n", lib.Name, lib.Count)
+		checksumDisplay := lib.Checksum
+		if len(checksumDisplay) > 8 {
+			checksumDisplay = checksumDisplay[:8] + "..."
+		}
+		
+		if lib.Version != "" && lib.Version != "unknown" {
+			fmt.Printf("%-25s v%-8s [%11s]: %d occurrences (%s)\n", lib.Name, lib.Version, checksumDisplay, lib.Count, lib.IdentifiedBy)
+		} else {
+			fmt.Printf("%-35s [%11s]: %d occurrences (%s)\n", lib.Name, checksumDisplay, lib.Count, lib.IdentifiedBy)
+		}
 	}
 	
 	// Get recent scans

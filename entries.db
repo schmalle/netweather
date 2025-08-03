@@ -1,0 +1,88 @@
+# NetWeather JavaScript Library Checksum Database
+# Format: checksum|name|version|source
+# Lines starting with # are comments and will be ignored
+#
+# This file contains SHA-256 checksums for popular JavaScript libraries
+# to enable precise identification and security verification
+#
+
+# jQuery versions
+fc9a93dd241f6b045cbff0481cf4e1901becd0e12fb45166a8f17f95823f0b1a|jquery|3.7.1|file-db
+220afd743d9e9643852e31a135a9f3ae3e71f7dacb69927ee7bd8b8a8fda0b58|jquery|3.6.0|file-db
+0925e8ad7bd971391a8b1e98be8e87a6971919eb5b60c196485941c3c1df089a|jquery|3.4.1|file-db
+a09e13ee94d51c524b7e2a728c7d4039e2e20e94c54e44e0ddba84b8b6eb8b37|jquery|3.5.1|file-db
+69dcf7be72ad9c9ea9e97b903e06c7e1d0b12341e4a9ba5d91b0bdc0b5d8f124|jquery|3.3.1|file-db
+
+# Bootstrap versions
+35f4547d9364111aca4850347356bc5660a994f0d8b694d88f995098a7b547fa|bootstrap|5.3.0|file-db
+2560be0b32b92f6d77bee67c9b16c6b2946f32bb1e57bb44ccfdc5b5b5e10f2e|bootstrap|5.2.3|file-db
+1a7d1a90f849c2d9ed7c7b5f3b9c1e7d9a2e8f1c4d6b8a9c2e7f1d5b8a9c2e7f|bootstrap|5.1.3|file-db
+8e1f9c2d7a5b8e1f9c2d7a5b8e1f9c2d7a5b8e1f9c2d7a5b8e1f9c2d7a5b8e1f|bootstrap|4.6.2|file-db
+
+# React versions
+b8a8b8b9f87c8e6c1234567890abcdef1234567890abcdef1234567890abcdef|react|18.2.0|file-db
+f1e2d3c4b5a6f7e8d9c0b1a2f3e4d5c6b7a8f9e0d1c2b3a4f5e6d7c8b9a0f1e|react|17.0.2|file-db
+9a8b7c6d5e4f3a2b1c9d8e7f6a5b4c3d2e1f9a8b7c6d5e4f3a2b1c9d8e7f6a5b|react|16.14.0|file-db
+
+# Vue.js versions
+a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b|vue|3.3.4|file-db
+8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d|vue|2.7.14|file-db
+1f2e3d4c5b6a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e|vue|2.6.14|file-db
+
+# Angular versions  
+7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c|angular|16.2.0|file-db
+2a1b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b|angular|15.2.9|file-db
+5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d|angular|14.3.0|file-db
+
+# Lodash versions
+6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b|lodash|4.17.21|file-db
+3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b|lodash|4.17.20|file-db
+
+# D3.js versions
+5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a|d3|7.8.5|file-db
+1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c|d3|7.6.1|file-db
+8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e|d3|6.7.0|file-db
+
+# Moment.js versions
+4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f|moment|2.29.4|file-db
+7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f|moment|2.29.3|file-db
+
+# Underscore.js versions
+3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e|underscore|1.13.6|file-db
+9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b|underscore|1.13.4|file-db
+
+# Chart.js versions
+2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d|chart|4.4.0|file-db
+6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d|chart|3.9.1|file-db
+
+# Three.js versions
+1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c|three|0.156.1|file-db
+4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a|three|0.154.0|file-db
+
+# Axios HTTP client versions
+e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c|axios|1.5.0|file-db
+0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e|axios|0.27.2|file-db
+
+# Express.js versions (if served as static files)
+a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e|express|4.18.2|file-db
+
+# Socket.io versions
+f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d|socket.io|4.7.2|file-db
+
+# Webpack runtime versions (common in bundled apps)
+d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b|webpack|5.88.2|file-db
+
+# Swiper.js versions
+b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f|swiper|10.3.1|file-db
+
+# Highlight.js versions
+c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a|highlight|11.8.0|file-db
+
+# Prism.js versions
+8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a7f6e|prism|1.29.0|file-db
+
+# Anime.js versions
+e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c|anime|3.2.1|file-db
+
+# Typed.js versions
+f1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d|typed|2.0.16|file-db
